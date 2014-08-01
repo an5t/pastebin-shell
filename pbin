@@ -1,0 +1,163 @@
+#!/bin/bash
+#
+# bash pastebin.com client
+# (c) mefuckin <github.com/mefuckin>
+#
+# This work is free. You can redistribute it and/or modify it under the
+# terms of the Do What The Fuck You Want To Public License, Version 2,
+# as published by Sam Hocevar. See http://www.wtfpl.net/ for more details.
+#
+
+# Path to config file
+eval config_file="~/.config/pastebin.conf"
+
+# Config file overwrites following default settings
+
+# This is my API Developer Key (you can change it here or use config file)
+api_dev_key=97d4dbcc849cf72fe005154e40904f71
+
+# Autologin
+logintopastebin=0
+
+# Default paste title, if -n argument is not defined
+api_paste_name=
+
+# Default paste highlighting, if -f argument is not defined
+api_paste_format=text
+
+# Default private settings, if -p argument is not defined (0=public, 1=unlisted, 2=private)
+api_paste_private=0
+
+# Default expire date, if -e argument is not defined
+api_paste_expire_date=N
+
+usage()
+{
+cat << EOF
+Usage: $0 [options]
+Post text from stdin to pastebin.com.
+
+Options:
+   -l		Log into pastebin.com
+   -u		Your pastebin.com username
+   -p		Your pastebin.com password
+   -n name	Paste title
+   -f format	Syntax highlightig format (you can find list 
+		   of formats at http://pastebin.com/api#5)
+   -e expire	Paste expire time:
+		  n (or never) - never
+		  10M - 10 minutes
+		   1H - 1 hour
+		   1D - 1 day
+		   1M - 1 month
+   -r private	Private settings: public (or 0), unlisted (or 1)
+		   or private (or 2, need to login)
+   -h		Show this message
+   -o		Print sample config
+   -c /path/to/pastebin.conf	Set path to config file
+EOF
+}
+
+sample_config()
+{
+cat << EOF
+# Change to your API Developer Key
+#api_dev_key=
+
+# Change to your pastebin.com username, if you want to log into your account
+#api_user_name=
+
+# Change to your pastebin.com password
+#api_user_password=
+
+# Set to 1 if you want to log into your account automatically
+# (you may login with -l, -u, -p arguments also)
+#logintopastebin=0
+
+# Default paste title, if -n argument is not defined
+#api_paste_name=
+
+# Default paste highlighting, if -f argument is not defined
+# (see http://pastebin.com/api#5 for more)
+#api_paste_format=text
+
+# Default private settings, if -p argument is not defined
+# (0=public, 1=unlisted, 2=private)
+#api_paste_private=0
+
+# Default expire date, if -e argument is not defined
+#api_paste_expire_date=N
+EOF
+}
+
+auth_user()
+{
+	if [ -z $api_user_name ] || [ -z $api_user_password ]
+	then
+		echo "Username and/or password is undefined."
+		read -p "Enter your pastebin.com username: " api_user_name
+		read -s -p "Password: " api_user_password
+	fi
+
+	server_reply=`curl --silent -d "api_dev_key=$api_dev_key&api_user_name=$api_user_name&api_user_password=$api_user_password" \
+	http://pastebin.com/api/api_login.php`
+
+	if [[ $server_reply == Bad* ]]
+	then
+		echo $server_reply
+		exit 1
+	else
+		api_user_key=$server_reply
+	fi
+}
+
+[ -e $config_file ] && source $config_file
+
+while getopts "hu:p:ln:f:c:e:r:o" OPTION ; do
+  case $OPTION in
+    h) usage; exit ;;
+    o) sample_config; exit ;;
+    u) api_user_name=$OPTARG; logintopastebin=1 ;;
+    p) api_user_password=$OPTARG ;;
+    l) logintopastebin=1 ;;
+    n) api_paste_name=$OPTARG ;;
+    f) api_paste_format=$OPTARG ;;
+    e) case $OPTARG in
+        n|never) api_paste_expire_date=N ;;
+        10M) api_paste_expire_date=10M ;;
+        1H) api_paste_expire_date=1H ;;
+        1D) api_paste_expire_date=1D ;;
+        1M) api_paste_expire_date=1M ;;
+        1W) api_paste_expire_date=1W ;;
+        2W) api_paste_expire_date=2W ;;
+        *) echo "Invalid expire date"; exit 1 ;;
+       esac ;;
+    r) case $OPTARG in
+	      public|0) api_paste_private=0 ;;
+	      unlisted|1) api_paste_private=1 ;;
+	      private|2)
+		    if [ $logintopastebin -ne 1 ]
+		    then
+		      echo "You need to log in if you want to post private pastes."
+		      exit 1
+		    else
+		      api_paste_private=2
+		    fi
+		  ;;
+	      *) echo "Invalid private value"; exit 1 ;;
+       esac
+    ;;
+    c) if [ -e $OPTARG ];
+	   then
+	     source $OPTARG
+	   else
+	     echo "$OPTARG is not exists"
+	     exit 1
+	   fi
+    ;;
+  esac
+done
+
+[ $logintopastebin -ne 0 ] && auth_user
+curl -d "api_dev_key=$api_dev_key&api_option=paste&api_paste_code=`cat -`&api_paste_name=$api_paste_name&api_paste_format=$api_paste_format&api_paste_private=$api_paste_private&api_paste_expire_date=$api_paste_expire_date&api_user_key=$api_user_key" http://pastebin.com/api/api_post.php
+exit $?
