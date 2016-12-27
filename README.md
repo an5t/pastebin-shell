@@ -7,7 +7,7 @@ Bash pastebin.com client. Bash Script to post text from `stdin` to [pastebin.com
 Download:
 
 	curl -f https://raw.githubusercontent.com/mefuckin/pastebin-shell/master/pbin -o pbin
-	chmox +x pbin
+	chmod +x pbin
 
 Run:
 
